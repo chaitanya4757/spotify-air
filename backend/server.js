@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import http from "http";
 import {Server} from "socket.io";
 import connectDB from "./config/db.js";
+import authRoutes from "./routes/authRoutes.js";
 
 // import { connect } from "http2";
 
@@ -29,6 +30,8 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+app.use("/api/auth", authRoutes);
 
 app.get("/", (req, res) => {
     res.json({message: "Spotify Air backend running 🚀"});
