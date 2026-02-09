@@ -2,26 +2,33 @@ const axios = require('axios');
 const querystring = require('querystring');
 const User = require('../models/User');
 
+/**
+ * Helper: Create Spotify Auth Header
+ */
 const getAuthHeader = () => {
   return {
     headers: {
-      Authorization: 'Basic ' + (new Buffer.from(
-        process.env.SPOTIFY_CLIENT_ID + ':' + process.env.SPOTIFY_CLIENT_SECRET
-      ).toString('base64')),
+      Authorization:
+        'Basic ' +
+        Buffer.from(
+          process.env.SPOTIFY_CLIENT_ID + ':' + process.env.SPOTIFY_CLIENT_SECRET
+        ).toString('base64'),
       'Content-Type': 'application/x-www-form-urlencoded'
     }
   };
 };
 
 /**
- * 1. REFRESH TOKEN FUNCTION
- * Checks if the user's token is valid. If not, it gets a new one.
- * @param {Object} user - The full MongoDB user object
- * @returns {String} - A valid Access Token
+ * 1️⃣ REFRESH TOKEN FUNCTION
+ * Checks if the user's token is valid. If expired, refresh it.
  */
-
 const getValidAccessToken = async (user) => {
-  // If token is still fresh, just return it
+
+  // 🔥 If in mock mode, skip token logic entirely
+  if (process.env.MOCK_SPOTIFY === "true") {
+    return "mock_access_token";
+  }
+
   if (!user.needsRefresh()) {
     return user.accessToken;
   }
@@ -29,7 +36,8 @@ const getValidAccessToken = async (user) => {
   console.log(`🔄 Refreshing token for ${user.displayName}...`);
 
   try {
-    const response = await axios.post('https://accounts.spotify.com/api/token',
+    const response = await axios.post(
+      'https://accounts.spotify.com/api/token',
       querystring.stringify({
         grant_type: 'refresh_token',
         refresh_token: user.refreshToken
@@ -45,6 +53,7 @@ const getValidAccessToken = async (user) => {
     await user.save();
 
     return access_token;
+
   } catch (error) {
     console.error('Error refreshing token:', error.response?.data || error.message);
     throw new Error('Failed to refresh Spotify token');
@@ -52,34 +61,55 @@ const getValidAccessToken = async (user) => {
 };
 
 /**
- * 2. GET CURRENT TRACK
- * Fetches the currently playing song + Audio Features (Tempo/Energy)
- * @param {Object} user - The host user
- * @returns {Object} - Cleaned data for the frontend
+ * 2️⃣ GET CURRENT TRACK
+ * Returns currently playing track + audio physics
  */
-
 exports.getSpotifyPlaybackState = async (user) => {
+
+  // 🔥 FULL MOCK MODE STREAM
+  if (process.env.MOCK_SPOTIFY === "true") {
+    return {
+      uri: "spotify:track:mock",
+      title: "Mock Track",
+      artist: "Mock Artist",
+      albumArt: null,
+      isPlaying: true,
+      progressMs: Math.floor(Math.random() * 200000),
+      timestamp: Date.now(),
+      audioPhysics: {
+        tempo: 90 + Math.random() * 60,       // Random BPM 90–150
+        energy: Math.random(),                // 0–1
+        danceability: Math.random(),
+        loudness: -5 - Math.random() * 5      // -5 to -10 dB
+      }
+    };
+  }
+
+  // 🔥 REAL SPOTIFY MODE
   try {
     const accessToken = await getValidAccessToken(user);
 
-    // Call 1: Get Currently Playing Track
-    const playerResponse = await axios.get('https://api.spotify.com/v1/me/player/currently-playing', {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
+    const playerResponse = await axios.get(
+      'https://api.spotify.com/v1/me/player/currently-playing',
+      {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      }
+    );
 
     if (!playerResponse.data || !playerResponse.data.item) {
-      return null; // Nothing playing
+      return null;
     }
 
     const track = playerResponse.data.item;
     const isPlaying = playerResponse.data.is_playing;
     const progressMs = playerResponse.data.progress_ms;
 
-    // Call 2: Get Audio Features (Tempo, Energy for the "Visual Engine")
-    // We do this in parallel to be fast
-    const featuresResponse = await axios.get(`https://api.spotify.com/v1/audio-features/${track.id}`, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
+    const featuresResponse = await axios.get(
+      `https://api.spotify.com/v1/audio-features/${track.id}`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      }
+    );
 
     const features = featuresResponse.data;
 
@@ -88,15 +118,14 @@ exports.getSpotifyPlaybackState = async (user) => {
       title: track.name,
       artist: track.artists.map(a => a.name).join(', '),
       albumArt: track.album.images[0]?.url,
-      isPlaying: isPlaying,
-      progressMs: progressMs,
+      isPlaying,
+      progressMs,
       timestamp: Date.now(),
-      // Visual Engine Data
       audioPhysics: {
-        tempo: features.tempo,       // Speed (BPM)
-        energy: features.energy,     // Intensity (0.0 - 1.0)
+        tempo: features.tempo,
+        energy: features.energy,
         danceability: features.danceability,
-        loudness: features.loudness  // Decibels
+        loudness: features.loudness
       }
     };
 
@@ -105,4 +134,3 @@ exports.getSpotifyPlaybackState = async (user) => {
     return null;
   }
 };
-

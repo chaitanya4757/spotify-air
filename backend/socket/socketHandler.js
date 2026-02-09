@@ -5,11 +5,12 @@ const Room = require('../models/Room');
 
 module.exports = (server) => {
   const io = socketIo(server, {
-    cors: {
-      origin: process.env.CLIENT_URL || "http://localhost:5173", // Your Vite Frontend
-      methods: ["GET", "POST"]
-    }
-  });
+  cors: {
+    origin: process.env.CLIENT_URL || "http://localhost:5173",
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
   
   io.on('connection', (socket) => {
     console.log('🔌 New Client Connected:', socket.id);

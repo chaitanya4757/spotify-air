@@ -13,46 +13,29 @@ const generateRoomId = () => {
 
 exports.createRoom = async (req, res) => {
   try {
-    const { spotifyId } = req.body; // We assume frontend sends this
+    if (!req.session.userId) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
 
-    // 1. Find the Host User in DB
-    const host = await User.findOne({ spotifyId });
+    const host = await User.findById(req.session.userId);
+
     if (!host) {
-      return res.status(404).json({ error: 'User not found. Please login again.' });
+      return res.status(404).json({ message: "Host not found" });
     }
 
-    // 2. Generate Unique Room ID
-    let roomId = generateRoomId();
-    // Simple check to ensure uniqueness (rare collision case)
-    let existingRoom = await Room.findOne({ roomId });
-    while (existingRoom) {
-      roomId = generateRoomId();
-      existingRoom = await Room.findOne({ roomId });
-    }
-    const newRoom = await Room.create({
+    const roomId = "AIR-" + Math.random().toString(36).substring(2, 7).toUpperCase();
+
+    const room = await Room.create({
       roomId,
       host: host._id,
-      members: [{
-        user: host._id,
-        socketId: null, // Socket connects later in Phase 2, Step 6
-        joinedAt: Date.now()
-      }],
-      currentVibe: {
-        mood: 'Waiting for Music...',
-        colorHex: '#555555' // Neutral Grey
-      }
+      members: [host._id]
     });
 
-    res.status(201).json({
-      success: true,
-      roomId: newRoom.roomId,
-      message: 'Room created successfully',
-      room: newRoom
-    });
+    res.status(201).json(room);
 
   } catch (error) {
-    console.error('Error creating room:', error);
-    res.status(500).json({ error: 'Server Error creating room' });
+    console.error("Error creating room:", error);
+    res.status(500).json({ message: "Server error" });
   }
 };
 

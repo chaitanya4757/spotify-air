@@ -4,7 +4,33 @@ const User = require("../models/User");
 
 const redirectUri = "http://localhost:5000/api/auth/callback";
 
-exports.login = (req, res) => {
+exports.login = async (req, res) => {
+  console.log("MOCK_SPOTIFY:", process.env.MOCK_SPOTIFY);
+
+  if (process.env.MOCK_SPOTIFY === "true") {
+    let user = await User.findOne();
+
+    if (!user) {
+      user = await User.create({
+        spotifyId: "mock123",
+        displayName: "Mock User",
+        email: "mock@example.com",
+        images: [],
+        accessToken: "mock",
+        refreshToken: "mock",
+        tokenExpiresIn: 3600,
+        tokenUpdatedAt: Date.now()
+      });
+      console.log("Created mock user");
+    }
+
+    req.session.userId = user._id;
+
+    console.log("Redirecting to frontend...");
+    return res.redirect("http://localhost:5173");
+  }
+
+  // Real Spotify flow
   const scope = [
     "user-read-playback-state",
     "user-modify-playback-state",
@@ -18,9 +44,9 @@ exports.login = (req, res) => {
     redirect_uri: redirectUri
   });
 
-  const authUrl = `https://accounts.spotify.com/authorize?${params}`;
-  res.redirect(authUrl);
+  res.redirect(`https://accounts.spotify.com/authorize?${params}`);
 };
+
 
 exports.callback = async (req, res) => {
   const code = req.query.code || null;
@@ -99,11 +125,18 @@ exports.callback = async (req, res) => {
 
 exports.getMe = async (req, res) => {
   if (!req.session.userId) {
-    return res.status(401).json({ message: "Not authenticated" });
+    return res.status(401).json({ user: null });
   }
 
   const user = await User.findById(req.session.userId)
     .select("-accessToken -refreshToken");
 
-  res.json(user);
+  res.json({ user });
 };
+
+exports.logout = (req, res) => {
+  req.session.destroy(() => {
+    res.json({ message: "Logged out" });
+  });
+};
+
