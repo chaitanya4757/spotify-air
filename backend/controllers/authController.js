@@ -1,45 +1,46 @@
-import axios from "axios";
-import querystring from "querystring";
+const axios = require("axios");
+const querystring = require("querystring");
+const User = require("../models/User");
 
-const redirecturi= "http://localhost:5000/api/auth/callback";
+const redirectUri = "http://localhost:5000/api/auth/callback";
 
-export const login = (req, res) => {
-    const scope=[
-        "user-read-playback-state",
-        "user-modify-playback-state",
-        "user-read-currently-playing"
-    ].json(" ");
+exports.login = (req, res) => {
+  const scope = [
+    "user-read-playback-state",
+    "user-modify-playback-state",
+    "user-read-currently-playing"
+  ].join(" ");
 
-    const params = querystring.stringify({
-        response_type: "code",
-        client_id: process.env.SPOTIFY_CLIENT_ID,
-        scope,
-        redirect_uri: redirectUri
-    });
+  const params = querystring.stringify({
+    response_type: "code",
+    client_id: process.env.SPOTIFY_CLIENT_ID,
+    scope,
+    redirect_uri: redirectUri
+  });
 
-    const authUrl= `https://accounts.spotify.com/authorize?${params}`;
-
-     res.redirect(authUrl);
+  const authUrl = `https://accounts.spotify.com/authorize?${params}`;
+  res.redirect(authUrl);
 };
 
-export const callback = async (req, res) => {
-    const code = req.query.code || null;
+exports.callback = async (req, res) => {
+  const code = req.query.code || null;
 
-    if (!code){
-         return res.status(400).json({ error: "No code provided" });
-    }
+  if (!code) {
+    return res.status(400).json({ error: "No code provided" });
+  }
 
-    if (process.env.MOCK_SPOTIFY === "true") {
-    return res.json({
-        message: "Mock Spotify login successful 🚀",
-        access_token: "mock_access_token",
-        refresh_token: "mock_refresh_token"
-        });
+  if (process.env.MOCK_SPOTIFY === "true") {
+    const user = await User.findOne();
+    if (user) {
+      req.session.userId = user._id;
     }
-    try{
-        const response = await axios.post(
-        "https://accounts.spotify.com/api/token",
-        querystring.stringify({
+    return res.json({ message: "Mock login successful 🚀" });
+  }
+
+  try {
+    const tokenResponse = await axios.post(
+      "https://accounts.spotify.com/api/token",
+      querystring.stringify({
         grant_type: "authorization_code",
         code,
         redirect_uri: redirectUri
@@ -54,16 +55,55 @@ export const callback = async (req, res) => {
                 process.env.SPOTIFY_CLIENT_SECRET
             ).toString("base64"),
           "Content-Type": "application/x-www-form-urlencoded"
-            }
         }
-        );
+      }
+    );
 
-        res.json({
-            message: "Spotify token received (when API is live)",
-            data: response.data
-        });
-    }catch (error) {
+    const { access_token, refresh_token } = tokenResponse.data;
+
+    const profileResponse = await axios.get(
+      "https://api.spotify.com/v1/me",
+      {
+        headers: { Authorization: `Bearer ${access_token}` }
+      }
+    );
+
+    const profile = profileResponse.data;
+
+    let user = await User.findOne({ spotifyId: profile.id });
+
+    if (!user) {
+      user = await User.create({
+        spotifyId: profile.id,
+        displayName: profile.display_name,
+        email: profile.email,
+        profileImage: profile.images?.[0]?.url,
+        accessToken: access_token,
+        refreshToken: refresh_token
+      });
+    } else {
+      user.accessToken = access_token;
+      user.refreshToken = refresh_token;
+      await user.save();
+    }
+
+    req.session.userId = user._id;
+
+    res.json({ message: "Login successful" });
+
+  } catch (error) {
     console.error("Spotify Auth Error:", error.response?.data || error.message);
     res.status(500).json({ error: "Spotify authentication failed" });
   }
+};
+
+exports.getMe = async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).json({ message: "Not authenticated" });
+  }
+
+  const user = await User.findById(req.session.userId)
+    .select("-accessToken -refreshToken");
+
+  res.json(user);
 };

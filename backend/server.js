@@ -1,28 +1,22 @@
-import express from "express";
-import cors from "cors";
-import dotenv from "dotenv";
-import http from "http";
-import {Server} from "socket.io";
-import connectDB from "./config/db.js";
-import authRoutes from "./routes/authRoutes.js";
+const session = require("express-session");
+const express = require('express');
+const http = require('http');
+const cors = require('cors');
+const dotenv = require('dotenv');
+const mongoose = require('mongoose');
+
+// Import your custom files
+const connectDB = require('./config/db'); // Ensure db.js uses module.exports
+const authRoutes = require('./routes/authRoutes');
+const roomRoutes = require('./routes/roomRoutes');
+const socketHandler = require('./socket/socketHandler'); // <--- Your new Phase 2 logic
 
 // import { connect } from "http2";
 
 dotenv.config();
 
-connectDB()
-
 const app=express();
-
 const server = http.createServer(app);
-
-const io = new Server(server, {
-    cors:{
-        origin: process.env.CLIENT_URL,
-        methods: ["GET", "POST"],
-        Credentials: true
-    }
-});
 
 app.use(cors({
     origin: process.env.CLIENT_URL,
@@ -31,22 +25,33 @@ app.use(cors({
 
 app.use(express.json());
 
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: false, // true only in production with HTTPS
+      httpOnly: true
+    }
+  })
+);
+
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log('✅ MongoDB Connected'))
+  .catch(err => console.error('❌ DB Error:', err));
+
 app.use("/api/auth", authRoutes);
+app.use('/api/rooms', roomRoutes);
+
+const io = socketHandler(server); // <--- Pass the server to the handler
+
+
 
 app.get("/", (req, res) => {
     res.json({message: "Spotify Air backend running 🚀"});
 });
 
-io.on("connection", (socket) => {
-    console.log("User connected:", socket.id);
-
-    socket.on("disconnect", ()=>{
-        console.log("User disconnected:", socket.id)
-    });
-});
-
 const PORT = process.env.PORT || 5000;
-
-server.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+server.listen(PORT, () => 
+    console.log(`🚀 Server running on port ${PORT}`));
