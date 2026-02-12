@@ -3,48 +3,55 @@ import socket from "../services/socket";
 import { useAuth } from "../hooks/useAuth";
 
 function Room({ roomId }) {
-  const { user } = useAuth();   // 🔥 get real authenticated user
+  const { user } = useAuth();
   const [track, setTrack] = useState(null);
 
   useEffect(() => {
-    if (!roomId || !user) return;
+    if (!user) return;
 
-    // Join the room
+    // Join room
     socket.emit("join-room", {
       roomId,
-      userId: user._id   // ✅ real MongoDB ObjectId
+      userId: user._id
     });
 
-    // Start stream (host only for now)
+    // Start stream
     socket.emit("start-stream", {
       roomId,
-      hostId: user._id   // ✅ real MongoDB ObjectId
+      hostId: user._id
     });
 
-    socket.on("track-update", (data) => {
-    setTrack(data);
-    });
-
-
-    return () => {
-      socket.off("track-update");
+    const handleTrackUpdate = (data) => {
+      console.log("🎧 Track update received:", data);
+      setTrack(data);
     };
 
+    socket.on("track-update", handleTrackUpdate);
+
+    return () => {
+      socket.off("track-update", handleTrackUpdate);
+    };
   }, [roomId, user]);
 
   return (
     <div style={{ marginTop: "2rem" }}>
-      <h2>Room: {roomId}</h2>
+      <p><strong>Room:</strong> {roomId}</p>
 
-      {track ? (
-        <div>
-          <p><strong>{track.title}</strong></p>
-          <p>{track.artist}</p>
-          <p>Tempo: {track.audioPhysics?.tempo}</p>
-          <p>Energy: {track.audioPhysics?.energy}</p>
-        </div>
-      ) : (
+      {!track ? (
         <p>Waiting for track updates...</p>
+      ) : (
+        <div>
+          <h3>{track.title}</h3>
+          <p>{track.artist}</p>
+
+          {track.albumArt && (
+            <img
+              src={track.albumArt}
+              alt="album"
+              style={{ width: 200, borderRadius: 10 }}
+            />
+          )}
+        </div>
       )}
     </div>
   );

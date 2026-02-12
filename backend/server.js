@@ -15,6 +15,8 @@ const socketHandler = require('./socket/socketHandler'); // <--- Your new Phase 
 
 dotenv.config();
 
+console.log("CLIENT_ID:", process.env.SPOTIFY_CLIENT_ID);
+
 const app=express();
 const server = http.createServer(app);
 

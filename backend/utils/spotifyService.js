@@ -86,24 +86,33 @@ exports.getSpotifyPlaybackState = async (user) => {
   }
 
   // 🔥 REAL SPOTIFY MODE
-  try {
-    const accessToken = await getValidAccessToken(user);
+ // 🔥 REAL SPOTIFY MODE
+try {
+  const accessToken = await getValidAccessToken(user);
 
-    const playerResponse = await axios.get(
-      'https://api.spotify.com/v1/me/player/currently-playing',
-      {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      }
-    );
+  console.log("🎵 Fetching playback from Spotify...");
 
-    if (!playerResponse.data || !playerResponse.data.item) {
-      return null;
+  const playerResponse = await axios.get(
+    'https://api.spotify.com/v1/me/player/currently-playing',
+    {
+      headers: { Authorization: `Bearer ${accessToken}` }
     }
+  );
 
-    const track = playerResponse.data.item;
-    const isPlaying = playerResponse.data.is_playing;
-    const progressMs = playerResponse.data.progress_ms;
+  console.log("🎵 Spotify raw response:", playerResponse.data);
 
+  if (!playerResponse.data || !playerResponse.data.item) {
+    return null;
+  }
+
+  const track = playerResponse.data.item;
+  const isPlaying = playerResponse.data.is_playing;
+  const progressMs = playerResponse.data.progress_ms;
+
+  // ⚠️ Try audio features separately
+  let audioPhysics = null;
+
+  try {
     const featuresResponse = await axios.get(
       `https://api.spotify.com/v1/audio-features/${track.id}`,
       {
@@ -113,6 +122,17 @@ exports.getSpotifyPlaybackState = async (user) => {
 
     const features = featuresResponse.data;
 
+    audioPhysics = {
+      tempo: features.tempo,
+      energy: features.energy,
+      danceability: features.danceability,
+      loudness: features.loudness
+    };
+
+    } catch (err) {
+      console.log("⚠️ Audio features failed, continuing without physics.");
+    }
+
     return {
       uri: track.uri,
       title: track.name,
@@ -121,16 +141,12 @@ exports.getSpotifyPlaybackState = async (user) => {
       isPlaying,
       progressMs,
       timestamp: Date.now(),
-      audioPhysics: {
-        tempo: features.tempo,
-        energy: features.energy,
-        danceability: features.danceability,
-        loudness: features.loudness
-      }
+      audioPhysics
     };
 
   } catch (error) {
     console.error('Error fetching Spotify Data:', error.message);
     return null;
   }
+
 };

@@ -2,7 +2,7 @@ const axios = require("axios");
 const querystring = require("querystring");
 const User = require("../models/User");
 
-const redirectUri = "http://localhost:5000/api/auth/callback";
+const redirectUri = "http://127.0.0.1:5000/api/auth/callback";
 
 exports.login = async (req, res) => {
   console.log("MOCK_SPOTIFY:", process.env.MOCK_SPOTIFY);
@@ -27,15 +27,17 @@ exports.login = async (req, res) => {
     req.session.userId = user._id;
 
     console.log("Redirecting to frontend...");
-    return res.redirect("http://localhost:5173");
+    return res.redirect(process.env.CLIENT_URL);
   }
 
   // Real Spotify flow
   const scope = [
-    "user-read-playback-state",
-    "user-modify-playback-state",
-    "user-read-currently-playing"
-  ].join(" ");
+  "user-read-playback-state",
+  "user-modify-playback-state",
+  "user-read-currently-playing",
+  "user-read-email"
+].join(" ");
+
 
   const params = querystring.stringify({
     response_type: "code",
@@ -85,7 +87,8 @@ exports.callback = async (req, res) => {
       }
     );
 
-    const { access_token, refresh_token } = tokenResponse.data;
+    const { access_token, refresh_token, expires_in } = tokenResponse.data;
+
 
     const profileResponse = await axios.get(
       "https://api.spotify.com/v1/me",
@@ -100,22 +103,27 @@ exports.callback = async (req, res) => {
 
     if (!user) {
       user = await User.create({
-        spotifyId: profile.id,
-        displayName: profile.display_name,
-        email: profile.email,
-        profileImage: profile.images?.[0]?.url,
-        accessToken: access_token,
-        refreshToken: refresh_token
-      });
+      spotifyId: profile.id,
+      displayName: profile.display_name,
+      email: profile.email,
+      images: profile.images || [],
+      accessToken: access_token,
+      refreshToken: refresh_token,
+      tokenExpiresIn: expires_in,
+      tokenUpdatedAt: Date.now()
+    });
     } else {
       user.accessToken = access_token;
       user.refreshToken = refresh_token;
+      user.tokenExpiresIn = expires_in;
+      user.tokenUpdatedAt = Date.now();
       await user.save();
+
     }
 
     req.session.userId = user._id;
 
-    res.json({ message: "Login successful" });
+    res.redirect(process.env.CLIENT_URL);
 
   } catch (error) {
     console.error("Spotify Auth Error:", error.response?.data || error.message);
