@@ -1,7 +1,6 @@
 const axios = require("axios");
 
 // 1. IN-MEMORY CACHE
-// Stores the vibe map so we only hit Gemini once per unique song.
 const vibeCache = {}; 
 
 exports.generateVibeMap = async (track) => {
@@ -67,22 +66,37 @@ exports.generateVibeMap = async (track) => {
   } catch (err) {
     console.error("❌ Vibe AI error:", err.message);
 
-    // 4. FALLBACK LOGIC
-    // If we hit a 429 error, return a default vibe so the visualizer stays active.
-    console.log("🛠️ Using fallback vibe map due to API error.");
+    // 4. IMPROVED 4-PHASE FALLBACK LOGIC
+    // We divide the song into 4 atmospheric phases with unique dual-color potential.
+    console.log("🛠️ Using 4-Phase Fallback vibe map due to API error.");
+    
     return [
       {
         "startPercent": 0,
-        "energy": 0.5,
-        "intensity": "steady",
-        "moodColor": "#00FFFF", // Default Neon Cyan
+        "energy": 0.4,
+        "intensity": "chill",
+        "moodColor": "#00FFFF", // Phase 1: Cyan (Complementary: Pink)
+        "tempoFeel": "slow"
+      },
+      {
+        "startPercent": 25,
+        "energy": 0.6,
+        "intensity": "groove",
+        "moodColor": "#BF00FF", // Phase 2: Purple (Complementary: Amber)
         "tempoFeel": "medium"
       },
       {
         "startPercent": 50,
-        "energy": 0.6,
-        "intensity": "steady",
-        "moodColor": "#FF00FF", // Default Neon Pink
+        "energy": 0.9,
+        "intensity": "high",
+        "moodColor": "#FF0000", // Phase 3: Red (Complementary: Ice Blue)
+        "tempoFeel": "fast"
+      },
+      {
+        "startPercent": 75,
+        "energy": 0.5,
+        "intensity": "resolving",
+        "moodColor": "#00FF00", // Phase 4: Green (Complementary: Gold)
         "tempoFeel": "medium"
       }
     ];

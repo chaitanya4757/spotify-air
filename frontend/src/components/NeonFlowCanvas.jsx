@@ -1,56 +1,60 @@
 import React, { useRef, useEffect, useMemo } from 'react';
 
-// Helper: Generate a contrasting secondary color
+/**
+ * Maps the 4 Fallback Phases to their complementary dual-theme pairs.
+ * Phase 1: Cyan/Pink (0-25%)
+ * Phase 2: Purple/Amber (25-50%)
+ * Phase 3: Red/IceBlue (50-75%)
+ * Phase 4: Green/Gold (75-100%)
+ */
 const getSecondaryColor = (hex) => {
   if (!hex) return "#FF00FF";
-  // Simple inverter: Cyan->Pink, Red->Blue
+  const upperHex = hex.toUpperCase();
+
   const colorMap = {
-    "#00FFFF": "#FF00FF", 
-    "#FF00FF": "#00FFFF", 
-    "#FF0000": "#0000FF", 
-    "#00FF00": "#FFFF00", 
+    "#00FFFF": "#FF00FF", // Cyan -> Pink
+    "#BF00FF": "#FFBF00", // Purple -> Amber
+    "#FF0000": "#A0D8EF", // Red -> Ice Blue
+    "#00FF00": "#FFD700", // Green -> Gold
   };
-  return colorMap[hex] || "#FFFFFF"; 
+
+  return colorMap[upperHex] || "#FFFFFF"; 
 };
 
-// 1. ADD 'progress' PROP (0-100)
 const NeonFlowCanvas = ({ vibeData, progress = 0 }) => {
   const canvasRef = useRef(null);
 
-  // 2. PARSE DATA (Handle both AI and Fallback formats)
+  // 1. Parse Data (Handle Gemini Object or Fallback Array)
   const segments = useMemo(() => {
-    if (Array.isArray(vibeData)) return vibeData; // Handle Fallback Array
-    if (vibeData?.segments) return vibeData.segments; // Handle AI Object
+    if (Array.isArray(vibeData)) return vibeData;
+    if (vibeData?.segments) return vibeData.segments;
     return []; 
   }, [vibeData]);
 
-  // 3. FIND ACTIVE SEGMENT (The Magic Logic)
+  // 2. Find Active Phase (Detects if song is in the middle)
   const activeSegment = useMemo(() => {
-    if (!segments.length) return null;
-    
-    // Find the segment that started most recently
-    // e.g. If progress is 60%, pick the segment that started at 50%
+    if (!segments.length) return { moodColor: "#00FFFF", energy: 0.5 };
+    // Reverse find the latest segment that has started based on current progress
     return [...segments].reverse().find(s => s.startPercent <= progress) || segments[0];
   }, [segments, progress]);
 
-  // Determine Target Colors
-  const targetPrimary = activeSegment?.moodColor || "#00FFFF";
+  // 3. Extract Visual Properties
+  const targetPrimary = activeSegment.moodColor || "#00FFFF";
   const targetSecondary = getSecondaryColor(targetPrimary);
+  const targetEnergy = activeSegment.energy || 0.5;
 
-  // Refs for smooth animation
+  // Refs to maintain smooth animation values between renders
   const targetPrimaryRef = useRef(targetPrimary);
   const targetSecondaryRef = useRef(targetSecondary);
+  const energyRef = useRef(targetEnergy);
 
-  // Update refs when the target changes
   useEffect(() => {
     targetPrimaryRef.current = targetPrimary;
     targetSecondaryRef.current = targetSecondary;
-  }, [targetPrimary, targetSecondary]);
+    energyRef.current = targetEnergy;
+  }, [targetPrimary, targetSecondary, targetEnergy]);
 
-  // --- RENDERING LOOP (Your existing nice waves) ---
-  const energy = 0.5; // Default for smoothness
-  const loudness = 0.5;
-
+  // Helper: Smoothly transition between hex colors
   const lerpColor = (start, end, amount) => {
     const s = parseInt(start.replace('#', ''), 16);
     const e = parseInt(end.replace('#', ''), 16);
@@ -65,6 +69,7 @@ const NeonFlowCanvas = ({ vibeData, progress = 0 }) => {
     const ctx = canvas.getContext('2d');
     let animationFrameId;
     let time = 0;
+    
     let currentPrimary = targetPrimaryRef.current;
     let currentSecondary = targetSecondaryRef.current;
 
@@ -76,12 +81,11 @@ const NeonFlowCanvas = ({ vibeData, progress = 0 }) => {
     resizeCanvas();
 
     const LINE_COUNT = 20; 
-    const BASE_SPEED = 0.001; 
-    
+
     const render = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Smoothly blend to the new colors
+      // Smooth color morphing
       currentPrimary = lerpColor(currentPrimary, targetPrimaryRef.current, 0.05);
       currentSecondary = lerpColor(currentSecondary, targetSecondaryRef.current, 0.05);
 
@@ -91,9 +95,9 @@ const NeonFlowCanvas = ({ vibeData, progress = 0 }) => {
       gradient.addColorStop(1, currentPrimary);
 
       ctx.globalCompositeOperation = "screen"; 
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 4;
       ctx.strokeStyle = gradient;
-      ctx.shadowBlur = 15;
+      ctx.shadowBlur = 40;
       ctx.shadowColor = currentSecondary;
 
       const cy = canvas.height / 2;
@@ -101,31 +105,42 @@ const NeonFlowCanvas = ({ vibeData, progress = 0 }) => {
       for (let i = 0; i < LINE_COUNT; i++) {
         ctx.beginPath();
         const offset = (i - LINE_COUNT / 2) * 12; 
-        const phase = i * 0.2; 
-        const baseAmp = 20 + (loudness * 100);
+        const phaseShift = i * 0.2; 
+        
+        // Dynamic Wave Height based on Energy from Backend
+        const baseAmp = 30 + (energyRef.current * 120);
         const lineAmp = baseAmp * (1 - Math.abs(i - LINE_COUNT/2) / LINE_COUNT); 
-        const lineFreq1 = 0.008 + (i * 0.00015); 
-        const lineFreq2 = 0.015 + (i * 0.0002);
+        const lineFreq = 0.008 + (i * 0.00015);
 
         for (let x = 0; x < canvas.width; x += 10) {
-            const y = cy + offset + Math.sin((x * lineFreq1) - time + phase) * lineAmp + Math.sin((x * lineFreq2) - time) * (lineAmp * 0.5); 
+            const y = cy + offset + Math.sin((x * lineFreq) - time + phaseShift) * lineAmp; 
             if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
         }
         ctx.globalAlpha = 0.8 - (Math.abs(i - LINE_COUNT/2) / LINE_COUNT);
         ctx.stroke();
       }
+      
       ctx.globalCompositeOperation = "source-over";
-      time += BASE_SPEED + (energy * 0.005);
+      // Dynamic Speed based on Energy from Backend
+      time += 0.002 + (energyRef.current * 0.012);
+      
       animationFrameId = window.requestAnimationFrame(render);
     };
+
     render();
     return () => {
       window.cancelAnimationFrame(animationFrameId);
       window.removeEventListener('resize', resizeCanvas);
     };
-  }, []); // Logic is self-contained via refs
+  }, []); 
 
-  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full -z-10 pointer-events-none" />;
+  return (
+    <canvas 
+      ref={canvasRef} 
+      className="absolute inset-0 w-full h-full -z-10 pointer-events-none" 
+      style={{ display: 'block' }}
+    />
+  );
 };
 
 export default NeonFlowCanvas;
