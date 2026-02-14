@@ -1,8 +1,8 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import api from "../services/api";
 import Room from "./Room";
 
-function Dashboard() {
+function Dashboard({ onVibeChange, onProgressChange }) {
   const [room, setRoom] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -19,7 +19,14 @@ function Dashboard() {
   };
 
   if (room) {
-    return <Room roomId={room.roomId} />;
+    // ✅ 4. PASS PROPS: Handing off the setters to the Room
+    return (
+      <Room 
+        roomId={room.roomId} 
+        onVibeChange={onVibeChange} 
+        onProgressChange={onProgressChange} 
+      />
+    );
   }
 
   return (
@@ -27,19 +34,7 @@ function Dashboard() {
       <button
         onClick={createRoom}
         disabled={loading}
-        className="
-          px-8 py-4
-          bg-white/10
-          hover:bg-white/20
-          border border-white/30
-          rounded-2xl
-          text-white
-          text-lg
-          font-semibold
-          shadow-lg
-          transition-all duration-300
-          /* REMOVED backdrop-blur here */
-        "
+        className="px-8 py-4 bg-white/10 hover:bg-white/20 border border-white/20 rounded-2xl text-white font-semibold transition-all"
       >
         {loading ? "Creating..." : "Create Vibe Room"}
       </button>

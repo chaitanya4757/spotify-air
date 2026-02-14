@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import socket from "../services/socket";
 import { useAuth } from "../hooks/useAuth";
 
-function Room({ roomId }) {
+function Room({ roomId, onVibeChange, onProgressChange }) {
   const { user } = useAuth();
   const [track, setTrack] = useState(null);
 
@@ -14,6 +14,8 @@ function Room({ roomId }) {
 
     const handleTrackUpdate = (data) => {
       setTrack(data);
+      // ✅ 5. UPDATE BACKGROUND: Send data back up to App.jsx
+      if (data.vibeMap && onVibeChange) onVibeChange(data.vibeMap);
     };
 
     socket.on("track-update", handleTrackUpdate);
@@ -21,80 +23,30 @@ function Room({ roomId }) {
     return () => {
       socket.off("track-update", handleTrackUpdate);
     };
-  }, [roomId, user]);
+  }, [roomId, user, onVibeChange]);
 
-  const progress = (track && track.duration_ms) 
-    ? (track.progressMs / track.duration_ms) * 100 
-    : 0;
+  useEffect(() => {
+    if (track && onProgressChange) {
+      const currentProgress = (track.progressMs / track.duration_ms) * 100;
+      onProgressChange(currentProgress);
+    }
+  }, [track, onProgressChange]);
 
   return (
-    /* 1. This Wrapper ensures the Card is centered in the Bigger Glass */
-    <div style={{ 
-      display: "flex",
-      justifyContent: "center", // Centers horizontally
-      alignItems: "center",     // Centers vertically
-      width: "100%",
-      height: "100%",           // Takes full height of the bigger glass
-      minHeight: "400px"        // Matches the visual weight of your screenshots
-    }}>
-      
-      {/* 2. The Song Card (Smaller Glass) */}
-      <div style={{ 
-        position: "relative", 
-        zIndex: 10,
-        background: "rgba(255, 255, 255, 0.08)", 
-        backdropFilter: "blur(16px)",           
-        padding: "2.5rem",
-        borderRadius: "28px",
-        border: "1px solid rgba(255, 255, 255, 0.15)",
-        boxShadow: "0 15px 35px rgba(0, 0, 0, 0.4)",
-        textAlign: "center",
-        width: "340px",
-      }}>
-        
-        <p style={{ opacity: 0.5, fontSize: "0.75rem", marginBottom: "1.2rem", letterSpacing: "1px" }}>
-          ROOM: {roomId}
-        </p>
-
+    <div className="w-full h-full flex items-center justify-center">
+      <div className="relative z-20 bg-white/5 backdrop-blur-xl p-10 rounded-[32px] border border-white/10 w-[380px] text-center shadow-2xl">
         {!track ? (
-          <p style={{ opacity: 0.8 }}>Waiting for music...</p>
+          <p className="text-white/60">Waiting for Vibe...</p>
         ) : (
           <div>
-            {track.albumArt && (
-              <img
-                src={track.albumArt}
-                alt="album"
-                style={{ 
-                  width: "100%", 
-                  borderRadius: "18px", 
-                  marginBottom: "1.5rem",
-                  boxShadow: "0 12px 25px rgba(0,0,0,0.5)" 
-                }}
+            <img src={track.albumArt} className="rounded-2xl shadow-xl mb-6 w-full" alt="art" />
+            <h2 className="text-xl font-bold text-white mb-2">{track.title}</h2>
+            <p className="text-white/60 mb-8">{track.artist}</p>
+            <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-white transition-all duration-1000" 
+                style={{ width: `${(track.progressMs / track.duration_ms) * 100}%` }} 
               />
-            )}
-            
-            <h2 style={{ margin: "0 0 0.4rem 0", fontSize: "1.4rem", fontWeight: "600" }}>
-              {track.title}
-            </h2>
-            <p style={{ margin: "0", opacity: 0.7, fontSize: "1rem" }}>
-              {track.artist}
-            </p>
-
-            {/* Progress Bar */}
-            <div style={{ 
-              width: "100%", 
-              height: "4px", 
-              background: "rgba(255,255,255,0.1)", 
-              borderRadius: "10px",
-              marginTop: "2rem",
-              overflow: "hidden"
-            }}>
-              <div style={{ 
-                width: `${progress}%`, 
-                height: "100%", 
-                background: "#fff",
-                transition: "width 1s linear"
-              }} />
             </div>
           </div>
         )}
