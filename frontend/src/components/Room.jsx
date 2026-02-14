@@ -14,7 +14,6 @@ function Room({ roomId, onVibeChange, onProgressChange }) {
 
     const handleTrackUpdate = (data) => {
       setTrack(data);
-      // ✅ 5. UPDATE BACKGROUND: Send data back up to App.jsx
       if (data.vibeMap && onVibeChange) onVibeChange(data.vibeMap);
     };
 
@@ -34,14 +33,29 @@ function Room({ roomId, onVibeChange, onProgressChange }) {
 
   return (
     <div className="w-full h-full flex items-center justify-center">
-      <div className="relative z-20 bg-white/5 backdrop-blur-xl p-10 rounded-[32px] border border-white/10 w-[380px] text-center shadow-2xl">
+      
+      {/* RESIZED PANEL: 
+        Width reduced to 320px (from 380px)
+        Padding reduced to p-8 (from p-10)
+      */}
+      <div className="relative z-20 bg-white/5 backdrop-blur-2xl p-8 rounded-[32px] border border-white/10 w-[320px] text-center shadow-2xl">
         {!track ? (
-          <p className="text-white/60">Waiting for Vibe...</p>
+          <p className="text-white/60 text-sm">Waiting for Vibe...</p>
         ) : (
           <div>
-            <img src={track.albumArt} className="rounded-2xl shadow-xl mb-6 w-full" alt="art" />
-            <h2 className="text-xl font-bold text-white mb-2">{track.title}</h2>
-            <p className="text-white/60 mb-8">{track.artist}</p>
+            {/* Reduced margins for more whitespace elsewhere */}
+            <p className="text-white/30 text-[9px] tracking-widest mb-4 uppercase">Room: {roomId}</p>
+            
+            <img 
+              src={track.albumArt} 
+              className="rounded-2xl shadow-xl mb-5 w-full aspect-square object-cover" 
+              alt="art" 
+            />
+            
+            {/* Reduced font sizes to fit the smaller container */}
+            <h2 className="text-lg font-bold text-white mb-1 truncate">{track.title}</h2>
+            <p className="text-white/50 text-sm mb-6 truncate">{track.artist}</p>
+            
             <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-white transition-all duration-1000" 
