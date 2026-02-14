@@ -30,13 +30,15 @@ function Dashboard() {
         className="
           px-8 py-4
           bg-white/10
-          backdrop-blur-xl
-          border border-white/20
+          hover:bg-white/20
+          border border-white/30
           rounded-2xl
           text-white
           text-lg
-          hover:bg-white/20
+          font-semibold
+          shadow-lg
           transition-all duration-300
+          /* REMOVED backdrop-blur here */
         "
       >
         {loading ? "Creating..." : "Create Vibe Room"}
