@@ -56,7 +56,7 @@ const getValidAccessToken = async (user) => {
 /**
  * 2️⃣ GET CURRENT TRACK
  */
-exports.getSpotifyPlaybackState = async (user) => {
+const getSpotifyPlaybackState = async (user) => {
 
   // 🔥 FULL MOCK MODE STREAM
   if (process.env.MOCK_SPOTIFY === "true") {
@@ -67,7 +67,7 @@ exports.getSpotifyPlaybackState = async (user) => {
       albumArt: null,
       isPlaying: true,
       progressMs: Math.floor(Math.random() * 200000),
-      duration_ms: 200000, // <--- ADDED MOCK DURATION
+      duration_ms: 200000, 
       timestamp: Date.now(),
       audioPhysics: {
         tempo: 120,
@@ -84,7 +84,7 @@ exports.getSpotifyPlaybackState = async (user) => {
 
     // 1. Get Playback
     const playerResponse = await axios.get(
-      'https://api.spotify.com/v1/me/player/currently-playing', // Corrected URL (yours looked like a proxy placeholder)
+      'https://api.spotify.com/v1/me/player/currently-playing', 
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
@@ -100,7 +100,7 @@ exports.getSpotifyPlaybackState = async (user) => {
     let audioPhysics = null;
     try {
       const featuresResponse = await axios.get(
-        `https://api.spotify.com/v1/audio-features/${track.id}`, // Corrected URL
+        `https://api.spotify.com/v1/audio-features/${track.id}`, 
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
       const features = featuresResponse.data;
@@ -121,7 +121,7 @@ exports.getSpotifyPlaybackState = async (user) => {
       albumArt: track.album.images[0]?.url,
       isPlaying,
       progressMs,
-      duration_ms: track.duration_ms, // <--- 🔥 THIS IS THE KEY MISSING LINE!
+      duration_ms: track.duration_ms, 
       timestamp: Date.now(),
       audioPhysics
     };
@@ -133,4 +133,52 @@ exports.getSpotifyPlaybackState = async (user) => {
     console.error('Error fetching Spotify Data:', error.message);
     return null;
   }
+};
+
+/**
+ * 3️⃣ FORCE SYNC PLAYBACK (The missing function!)
+ */
+const forceSyncPlayback = async (userId, trackUri, positionMs) => {
+  try {
+    const user = await User.findById(userId).select("+accessToken");
+    if (!user) throw new Error("User not found");
+
+    const headers = { Authorization: `Bearer ${user.accessToken}` };
+
+    // Ask Spotify what devices this user has turned on right now
+    const deviceRes = await axios.get("https://api.spotify.com/v1/me/player/devices", { headers });
+    const devices = deviceRes.data.devices;
+
+    if (!devices || devices.length === 0) {
+      console.log(`⚠️ No active devices found for listener: ${user.displayName}`);
+      return { success: false, message: "NO_DEVICE" };
+    }
+
+    // Find the currently active device, or just use the first one in the list
+    let targetDevice = devices.find(d => d.is_active);
+    if (!targetDevice) targetDevice = devices[0]; 
+
+    console.log(`🎧 Syncing ${user.displayName} on device: ${targetDevice.name}`);
+
+    // Send the Remote Control play command!
+    await axios.put(
+      `https://api.spotify.com/v1/me/player/play?device_id=${targetDevice.id}`, // ✅ Fixed URL and added the missing $ sign!
+      {
+        uris: [trackUri],
+        position_ms: positionMs
+      },
+      { headers }
+    );
+
+    return { success: true };
+  } catch (error) {
+    console.error("Force Sync Error:", error.response?.data || error.message);
+    return { success: false, message: "API_ERROR" };
+  }
+};
+
+// ✅ EXPORT BOTH FUNCTIONS AT THE BOTTOM
+module.exports = {
+  getSpotifyPlaybackState,
+  forceSyncPlayback
 };
