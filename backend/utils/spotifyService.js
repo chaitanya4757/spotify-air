@@ -20,11 +20,8 @@ const getAuthHeader = () => {
 
 /**
  * 1️⃣ REFRESH TOKEN FUNCTION
- * Checks if the user's token is valid. If expired, refresh it.
  */
 const getValidAccessToken = async (user) => {
-
-  // 🔥 If in mock mode, skip token logic entirely
   if (process.env.MOCK_SPOTIFY === "true") {
     return "mock_access_token";
   }
@@ -32,8 +29,6 @@ const getValidAccessToken = async (user) => {
   if (!user.needsRefresh()) {
     return user.accessToken;
   }
-
-  console.log(`🔄 Refreshing token for ${user.displayName}...`);
 
   try {
     const response = await axios.post(
@@ -46,12 +41,10 @@ const getValidAccessToken = async (user) => {
     );
 
     const { access_token, expires_in } = response.data;
-
     user.accessToken = access_token;
     user.tokenExpiresIn = expires_in;
     user.tokenUpdatedAt = Date.now();
     await user.save();
-
     return access_token;
 
   } catch (error) {
@@ -62,9 +55,8 @@ const getValidAccessToken = async (user) => {
 
 /**
  * 2️⃣ GET CURRENT TRACK
- * Returns currently playing track + audio physics
  */
-exports.getSpotifyPlaybackState = async (user) => {
+const getSpotifyPlaybackState = async (user) => {
 
   // 🔥 FULL MOCK MODE STREAM
   if (process.env.MOCK_SPOTIFY === "true") {
@@ -75,60 +67,49 @@ exports.getSpotifyPlaybackState = async (user) => {
       albumArt: null,
       isPlaying: true,
       progressMs: Math.floor(Math.random() * 200000),
+      duration_ms: 200000, 
       timestamp: Date.now(),
       audioPhysics: {
-        tempo: 90 + Math.random() * 60,       // Random BPM 90–150
-        energy: Math.random(),                // 0–1
-        danceability: Math.random(),
-        loudness: -5 - Math.random() * 5      // -5 to -10 dB
+        tempo: 120,
+        energy: 0.8,
+        danceability: 0.8,
+        loudness: -5
       }
     };
   }
 
   // 🔥 REAL SPOTIFY MODE
- // 🔥 REAL SPOTIFY MODE
-try {
-  const accessToken = await getValidAccessToken(user);
-
-  console.log("🎵 Fetching playback from Spotify...");
-
-  const playerResponse = await axios.get(
-    'https://api.spotify.com/v1/me/player/currently-playing',
-    {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    }
-  );
-
-  console.log("🎵 Spotify raw response:", playerResponse.data);
-
-  if (!playerResponse.data || !playerResponse.data.item) {
-    return null;
-  }
-
-  const track = playerResponse.data.item;
-  const isPlaying = playerResponse.data.is_playing;
-  const progressMs = playerResponse.data.progress_ms;
-
-  // ⚠️ Try audio features separately
-  let audioPhysics = null;
-
   try {
-    const featuresResponse = await axios.get(
-      `https://api.spotify.com/v1/audio-features/${track.id}`,
-      {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      }
+    const accessToken = await getValidAccessToken(user);
+
+    // 1. Get Playback
+    const playerResponse = await axios.get(
+      'https://api.spotify.com/v1/me/player/currently-playing', 
+      { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
-    const features = featuresResponse.data;
+    if (!playerResponse.data || !playerResponse.data.item) {
+      return null;
+    }
 
-    audioPhysics = {
-      tempo: features.tempo,
-      energy: features.energy,
-      danceability: features.danceability,
-      loudness: features.loudness
-    };
+    const track = playerResponse.data.item;
+    const isPlaying = playerResponse.data.is_playing;
+    const progressMs = playerResponse.data.progress_ms;
 
+    // 2. Get Audio Features
+    let audioPhysics = null;
+    try {
+      const featuresResponse = await axios.get(
+        `https://api.spotify.com/v1/audio-features/${track.id}`, 
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const features = featuresResponse.data;
+      audioPhysics = {
+        tempo: features.tempo,
+        energy: features.energy,
+        danceability: features.danceability,
+        loudness: features.loudness
+      };
     } catch (err) {
       console.log("⚠️ Audio features failed, continuing without physics.");
     }
@@ -140,13 +121,64 @@ try {
       albumArt: track.album.images[0]?.url,
       isPlaying,
       progressMs,
+      duration_ms: track.duration_ms, 
       timestamp: Date.now(),
       audioPhysics
     };
 
   } catch (error) {
+    if (error.response && error.response.status === 429) {
+        throw new Error("429_RATE_LIMIT");
+    }
     console.error('Error fetching Spotify Data:', error.message);
     return null;
   }
+};
 
+/**
+ * 3️⃣ FORCE SYNC PLAYBACK (The missing function!)
+ */
+const forceSyncPlayback = async (userId, trackUri, positionMs) => {
+  try {
+    const user = await User.findById(userId).select("+accessToken");
+    if (!user) throw new Error("User not found");
+
+    const headers = { Authorization: `Bearer ${user.accessToken}` };
+
+    // Ask Spotify what devices this user has turned on right now
+    const deviceRes = await axios.get("https://api.spotify.com/v1/me/player/devices", { headers });
+    const devices = deviceRes.data.devices;
+
+    if (!devices || devices.length === 0) {
+      console.log(`⚠️ No active devices found for listener: ${user.displayName}`);
+      return { success: false, message: "NO_DEVICE" };
+    }
+
+    // Find the currently active device, or just use the first one in the list
+    let targetDevice = devices.find(d => d.is_active);
+    if (!targetDevice) targetDevice = devices[0]; 
+
+    console.log(`🎧 Syncing ${user.displayName} on device: ${targetDevice.name}`);
+
+    // Send the Remote Control play command!
+    await axios.put(
+      `https://api.spotify.com/v1/me/player/play?device_id=${targetDevice.id}`, // ✅ Fixed URL and added the missing $ sign!
+      {
+        uris: [trackUri],
+        position_ms: positionMs
+      },
+      { headers }
+    );
+
+    return { success: true };
+  } catch (error) {
+    console.error("Force Sync Error:", error.response?.data || error.message);
+    return { success: false, message: "API_ERROR" };
+  }
+};
+
+// ✅ EXPORT BOTH FUNCTIONS AT THE BOTTOM
+module.exports = {
+  getSpotifyPlaybackState,
+  forceSyncPlayback
 };
