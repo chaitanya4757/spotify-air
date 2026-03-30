@@ -1,34 +1,3 @@
-// const { searchSpotifyTracks } = require('../utils/spotifyService');
-// const User = require('../models/User'); 
-
-// exports.searchTracks = async (req, res) => {
-//   try {
-//     const { q } = req.query;
-//     if (!q) {
-//       return res.status(400).json({ message: "Search query is required" });
-//     }
-
-//     // Assuming you have a way to identify the user making the request (e.g., from an auth middleware or session)
-//     // If you pass userId in the query or header temporarily for testing:
-//     const userId = req.user?.id || req.query.userId; 
-    
-//     if (!userId) {
-//        return res.status(401).json({ message: "Unauthorized: User ID required" });
-//     }
-
-//     const user = await User.findById(userId);
-//     if (!user) {
-//       return res.status(404).json({ message: "User not found" });
-//     }
-
-//     const tracks = await searchSpotifyTracks(user, q);
-//     res.status(200).json(tracks);
-
-//   } catch (error) {
-//     res.status(500).json({ message: "Search failed", error: error.message });
-//   }
-// };
-
 const { searchSpotifyTracks } = require('../utils/spotifyService');
 const User = require('../models/User'); 
 
