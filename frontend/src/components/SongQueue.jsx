@@ -1,19 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import QueueCard from './QueueCard';
 import socket from '../services/socket';
-import { useAuth } from '../hooks/useAuth'; // ✅ Grab the hook
+import { useAuth } from '../hooks/useAuth'; 
 
 const SongQueue = ({ roomId }) => {
   const [queue, setQueue] = useState([]);
-  const { user } = useAuth(); // ✅ Get the current user
+  const { user } = useAuth(); 
 
   useEffect(() => {
     socket.on('queue_update', (updatedQueue) => setQueue(updatedQueue));
     return () => socket.off('queue_update');
   }, []);
 
-  const handleUpvote = (trackId) => {
-    socket.emit('upvote_track', { roomId, trackId });
+  // ✅ Renamed handler to emit toggle_vote
+  const handleToggleVote = (trackId) => {
+    socket.emit('toggle_vote', { roomId, trackId });
   };
 
   return (
@@ -24,8 +25,8 @@ const SongQueue = ({ roomId }) => {
             key={track.id} 
             rank={index + 1} 
             track={track} 
-            onUpvote={handleUpvote} 
-            currentUserId={user?._id} // ✅ Pass the user ID to the card!
+            onToggleVote={handleToggleVote} // Passed the new function
+            currentUserId={user?._id}
           />
         ))}
         
