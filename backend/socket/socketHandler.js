@@ -33,20 +33,14 @@ module.exports = (server) => {
 
         socket.join(roomId);
         currentRoomId = roomId;
-        currentUserId = userId;
+        currentUserId = userId; // We store the user's DB ID here!
 
-        if (!global.roomMembers[roomId]) {
-          global.roomMembers[roomId] = [];
-        }
+        if (!global.roomMembers[roomId]) global.roomMembers[roomId] = [];
 
         const exists = global.roomMembers[roomId].find(m => m.userId === userId);
         if (!exists) {
           global.roomMembers[roomId].push({ 
-            userId, 
-            name, 
-            image, 
-            socketId: socket.id,
-            isHost 
+            userId, name, image, socketId: socket.id, isHost 
           });
         }
 
@@ -59,29 +53,19 @@ module.exports = (server) => {
         if (global.roomQueues[roomId]) {
             socket.emit("queue_update", global.roomQueues[roomId]);
         }
-
-        console.log(`👤 User ${name} joined ${roomId}`);
       } catch (err) {
         console.error("Join Error:", err.message);
       }
     });
 
     socket.on("chat-message", (msgData) => {
-        if (currentRoomId) {
-            io.to(currentRoomId).emit("chat-message", msgData);
-        }
+        if (currentRoomId) io.to(currentRoomId).emit("chat-message", msgData);
     });
 
     socket.on("start-stream", async ({ roomId, hostId }) => {
       if (!global.roomState[roomId]) {
-        global.roomState[roomId] = {
-          lastTrackUri: null,
-          vibeMap: null,
-          lastTrackData: null,
-          hostId: hostId 
-        };
+        global.roomState[roomId] = { lastTrackUri: null, vibeMap: null, lastTrackData: null, hostId };
       }
-
       if (global.roomTimers[roomId]) return;
 
       global.roomTimers[roomId] = setInterval(async () => {
@@ -93,14 +77,10 @@ module.exports = (server) => {
           if (!data || !data.isPlaying) return;
 
           const state = global.roomState[roomId];
-
           if (data.uri !== state.lastTrackUri) {
             state.lastTrackUri = data.uri;
             try {
-              state.vibeMap = await generateVibeMap({
-                title: data.title,
-                artist: data.artist
-              });
+              state.vibeMap = await generateVibeMap({ title: data.title, artist: data.artist });
             } catch (e) {
               state.vibeMap = null; 
             }
@@ -108,7 +88,6 @@ module.exports = (server) => {
 
           const updatePayload = { ...data, vibeMap: state.vibeMap };
           state.lastTrackData = updatePayload;
-
           io.to(roomId).emit("track-update", updatePayload);
 
         } catch (err) {
@@ -129,16 +108,13 @@ module.exports = (server) => {
          const timeSinceFetch = Date.now() - lastData.timestamp; 
          exactPosition = lastData.progressMs + timeSinceFetch + 1000;
       }
-      const result = await forceSyncPlayback(currentUserId, uri, exactPosition);
+      await forceSyncPlayback(currentUserId, uri, exactPosition);
     });
 
-    // --- DEMOCRATIC QUEUE LOGIC ---
+    // --- DEMOCRATIC QUEUE LOGIC (UPDATED) ---
     socket.on('suggest_track', ({ roomId, track }) => {
-      if (!global.roomQueues[roomId]) {
-        global.roomQueues[roomId] = [];
-      }
+      if (!global.roomQueues[roomId]) global.roomQueues[roomId] = [];
 
-      // ✅ FIX 2: Check for 8-track limit before adding
       if (global.roomQueues[roomId].length >= 8) {
         socket.emit("error", { message: "The queue is full! Upvote a song instead." });
         return;
@@ -147,7 +123,8 @@ module.exports = (server) => {
       const trackExists = global.roomQueues[roomId].find(t => t.id === track.id);
       
       if (!trackExists) {
-        const newTrack = { ...track, votes: 1 };
+        // ✅ FIX: Add the current user to the 'voters' array immediately!
+        const newTrack = { ...track, votes: 1, voters: [currentUserId] };
         global.roomQueues[roomId].push(newTrack);
         global.roomQueues[roomId].sort((a, b) => b.votes - a.votes);
         io.to(roomId).emit('queue_update', global.roomQueues[roomId]);
@@ -157,8 +134,11 @@ module.exports = (server) => {
     socket.on('upvote_track', ({ roomId, trackId }) => {
       if (global.roomQueues[roomId]) {
         const trackToUpvote = global.roomQueues[roomId].find(t => t.id === trackId);
-        if (trackToUpvote) {
+        
+        // ✅ FIX: Only allow the upvote if the user hasn't voted for this track yet
+        if (trackToUpvote && !trackToUpvote.voters.includes(currentUserId)) {
           trackToUpvote.votes += 1;
+          trackToUpvote.voters.push(currentUserId); // Record that this user has voted
           global.roomQueues[roomId].sort((a, b) => b.votes - a.votes);
           io.to(roomId).emit('queue_update', global.roomQueues[roomId]);
         }
