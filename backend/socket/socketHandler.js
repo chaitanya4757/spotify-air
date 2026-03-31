@@ -33,7 +33,7 @@ module.exports = (server) => {
 
         socket.join(roomId);
         currentRoomId = roomId;
-        currentUserId = userId; // We store the user's DB ID here!
+        currentUserId = userId; 
 
         if (!global.roomMembers[roomId]) global.roomMembers[roomId] = [];
 
@@ -74,9 +74,50 @@ module.exports = (server) => {
           if (!host) return;
 
           const data = await getSpotifyPlaybackState(host);
-          if (!data || !data.isPlaying) return;
+          if (!data) return;
 
           const state = global.roomState[roomId];
+
+          // ====================================================================
+          // 🚀 DEMOCRATIC QUEUE AUTO-PLAY INTERCEPTOR
+          // ====================================================================
+          // We check if the track changed (naturally finished or skipped) 
+          // OR if Spotify paused because the host's playlist ran out.
+          const trackChanged = state.lastTrackUri && data.uri !== state.lastTrackUri;
+          const playbackStopped = state.lastTrackUri && !data.isPlaying;
+
+          if (trackChanged || playbackStopped) {
+            if (global.roomQueues[roomId] && global.roomQueues[roomId].length > 0) {
+              console.log(`🎧 Auto-DJ: Intercepting stream to play queued track in ${roomId}`);
+              
+              // 1. Pop the top voted track from the queue
+              const nextTrack = global.roomQueues[roomId].shift(); 
+              
+              // 2. Broadcast the updated queue to all users immediately (so it vanishes from UI)
+              io.to(roomId).emit('queue_update', global.roomQueues[roomId]);
+
+              // 3. Force the Host's Spotify to play this top track!
+              await forceSyncPlayback(hostId, nextTrack.uri, 0);
+
+              // 4. Update the server state to expect this new track
+              state.lastTrackUri = nextTrack.uri;
+              
+              try {
+                state.vibeMap = await generateVibeMap({ title: nextTrack.title, artist: nextTrack.artist });
+              } catch (e) {
+                state.vibeMap = null; 
+              }
+
+              // Return early to skip standard broadcast. The next 5s poll will catch the officially playing track.
+              return; 
+            }
+          }
+          // ====================================================================
+
+          // If no queue override happened, and it's simply paused, we do nothing.
+          if (!data.isPlaying) return;
+
+          // Normal track change logic (first song, or no queue exists)
           if (data.uri !== state.lastTrackUri) {
             state.lastTrackUri = data.uri;
             try {
@@ -97,7 +138,7 @@ module.exports = (server) => {
              io.to(roomId).emit("error", { message: "Stream Paused: Rate Limit" });
           }
         }
-      }, 5000);
+      }, 5000); // 5-second polling interval
     });
 
     socket.on("sync-listener", async ({ uri, positionMs }) => {
@@ -111,7 +152,6 @@ module.exports = (server) => {
       await forceSyncPlayback(currentUserId, uri, exactPosition);
     });
 
-    // --- DEMOCRATIC QUEUE LOGIC (UPDATED) ---
     socket.on('suggest_track', ({ roomId, track }) => {
       if (!global.roomQueues[roomId]) global.roomQueues[roomId] = [];
 
@@ -123,7 +163,6 @@ module.exports = (server) => {
       const trackExists = global.roomQueues[roomId].find(t => t.id === track.id);
       
       if (!trackExists) {
-        // ✅ FIX: Add the current user to the 'voters' array immediately!
         const newTrack = { ...track, votes: 1, voters: [currentUserId] };
         global.roomQueues[roomId].push(newTrack);
         global.roomQueues[roomId].sort((a, b) => b.votes - a.votes);
@@ -131,14 +170,26 @@ module.exports = (server) => {
       }
     });
 
-    socket.on('upvote_track', ({ roomId, trackId }) => {
+    socket.on('toggle_vote', ({ roomId, trackId }) => {
       if (global.roomQueues[roomId]) {
-        const trackToUpvote = global.roomQueues[roomId].find(t => t.id === trackId);
+        const trackIndex = global.roomQueues[roomId].findIndex(t => t.id === trackId);
         
-        // ✅ FIX: Only allow the upvote if the user hasn't voted for this track yet
-        if (trackToUpvote && !trackToUpvote.voters.includes(currentUserId)) {
-          trackToUpvote.votes += 1;
-          trackToUpvote.voters.push(currentUserId); // Record that this user has voted
+        if (trackIndex !== -1) {
+          const track = global.roomQueues[roomId][trackIndex];
+          const hasVoted = track.voters.includes(currentUserId);
+          
+          if (hasVoted) {
+            track.votes -= 1;
+            track.voters = track.voters.filter(id => id !== currentUserId);
+            
+            if (track.votes <= 0) {
+              global.roomQueues[roomId].splice(trackIndex, 1);
+            }
+          } else {
+            track.votes += 1;
+            track.voters.push(currentUserId);
+          }
+          
           global.roomQueues[roomId].sort((a, b) => b.votes - a.votes);
           io.to(roomId).emit('queue_update', global.roomQueues[roomId]);
         }

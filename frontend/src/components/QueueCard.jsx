@@ -1,7 +1,6 @@
 import React from 'react';
 
-const QueueCard = ({ rank, track, onUpvote, currentUserId }) => {
-  // ✅ Check if the current user's ID is in the list of people who voted for this track
+const QueueCard = ({ rank, track, onToggleVote, currentUserId }) => {
   const hasVoted = track.voters?.includes(currentUserId);
 
   return (
@@ -28,14 +27,13 @@ const QueueCard = ({ rank, track, onUpvote, currentUserId }) => {
         </div>
       </div>
 
-      {/* ✅ VOTE BUTTON - Dynamically styles based on hasVoted state */}
+      {/* ✅ VOTE BUTTON - Re-enabled clicks and updated hover styles for toggling */}
       <button 
-        onClick={() => !hasVoted && onUpvote(track.id)} // Prevent clicking if already voted
-        disabled={hasVoted}
-        className={`flex flex-col items-center justify-center rounded-lg px-1.5 py-1.5 shrink-0 transition-all border 
+        onClick={() => onToggleVote(track.id)}
+        className={`flex flex-col items-center justify-center rounded-lg px-1.5 py-1.5 shrink-0 transition-all border cursor-pointer active:scale-90
           ${hasVoted 
-            ? 'bg-cyan-500/20 border-cyan-500/50 cursor-default shadow-[0_0_10px_rgba(6,182,212,0.2)]' // Active Voted State
-            : 'bg-black/40 border-white/5 hover:bg-cyan-500/20 active:scale-90 cursor-pointer' // Default Unvoted State
+            ? 'bg-cyan-500/20 border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.2)] hover:bg-cyan-500/10 hover:border-cyan-500/30' // Can unvote
+            : 'bg-black/40 border-white/5 hover:bg-cyan-500/20' // Can upvote
           }`}
       >
         <svg 
