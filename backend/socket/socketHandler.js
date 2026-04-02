@@ -23,6 +23,19 @@ module.exports = (server) => {
     let currentRoomId = null;
     let currentUserId = null;
 
+    socket.on("check-room", async (roomId) => {
+      try {
+        const room = await Room.findOne({ roomId });
+        if (room) {
+          socket.emit("room-valid", roomId);
+        } else {
+          socket.emit("room-invalid");
+        }
+      } catch (err) {
+        console.error("Check Room Error:", err.message);
+      }
+    });
+
     socket.on("join-room", async ({ roomId, userId, name, image, isHost }) => {
       try {
         const room = await Room.findOne({ roomId });
@@ -32,11 +45,23 @@ module.exports = (server) => {
         currentRoomId = roomId;
         currentUserId = userId; 
 
+        // ✅ 1. THE RETURNING KING LOGIC
+        let actualIsHost = isHost;
+        // If the room has a stream running, and this user's ID matches the host's ID...
+        if (global.roomState[roomId] && global.roomState[roomId].hostId === userId) {
+            actualIsHost = true; // Give them the crown!
+            socket.emit("host-restored"); // Tell their frontend to update the UI
+        }
+
         if (!global.roomMembers[roomId]) global.roomMembers[roomId] = [];
 
-        const exists = global.roomMembers[roomId].find(m => m.userId === userId);
-        if (!exists) {
-          global.roomMembers[roomId].push({ userId, name, image, socketId: socket.id, isHost });
+        const existingMember = global.roomMembers[roomId].find(m => m.userId === userId);
+        if (!existingMember) {
+          global.roomMembers[roomId].push({ userId, name, image, socketId: socket.id, isHost: actualIsHost });
+        } else {
+          // If they refreshed, update their new socket ID and Host status
+          existingMember.socketId = socket.id;
+          existingMember.isHost = actualIsHost;
         }
 
         io.to(roomId).emit("room-users-update", global.roomMembers[roomId]);
@@ -79,9 +104,20 @@ module.exports = (server) => {
           let playbackStopped = false;
           let isManualPause = false;
 
+          // ✅ NEW: Check if the song was already paused during the LAST server tick
+          const wasPaused = state.lastTrackData && state.lastTrackData.isPlaying === false;
+
           if (state.lastTrackUri && (!data || !data.isPlaying)) {
               if (!data) {
-                  playbackStopped = true;
+                  // ✅ THE BUG FIX: If it was already paused, and now data is missing, 
+                  // Spotify just went to sleep. Let it sleep!
+                  if (wasPaused) {
+                      isManualPause = true;
+                      console.log(`💤 Spotify device went to sleep while paused. Keeping it paused.`);
+                  } else {
+                      // If it vanished while actively playing, it probably hit the end of the queue.
+                      playbackStopped = true;
+                  }
               } else {
                   // Check if we are within the 8-second finish line window
                   const timeLeft = data.duration_ms - data.progressMs;
@@ -90,14 +126,12 @@ module.exports = (server) => {
                       playbackStopped = true; // Natural end
                   } else {
                       isManualPause = true; // Manual pause in middle of song
-                      console.log(`⏸️ Host manually paused with ${Math.floor(timeLeft/1000)}s left.`);
                   }
               }
           }
 
           if (!isManualPause) {
               if (trackChanged || playbackStopped) {
-                
                 // 1. Check Democratic Queue
                 if (global.roomQueues[roomId] && global.roomQueues[roomId].length > 0) {
                   console.log(`🎧 Auto-DJ: Intercepting stream for queued track in ${roomId}`);
@@ -152,8 +186,18 @@ module.exports = (server) => {
       }, 5000); 
     });
 
-    // ... (rest of your socket events like toggle_vote, suggest_track, disconnect)
-    // Ensure you keep your existing suggest_track and toggle_vote logic below!
+    // ✅ Restored sync-listener so Listeners can sync to the Host
+    socket.on("sync-listener", async ({ uri, positionMs }) => {
+      if (!currentUserId || !currentRoomId) return; 
+      let exactPosition = positionMs;
+      if (global.roomState[currentRoomId] && global.roomState[currentRoomId].lastTrackData) {
+         const lastData = global.roomState[currentRoomId].lastTrackData;
+         const timeSinceFetch = Date.now() - lastData.timestamp; 
+         exactPosition = lastData.progressMs + timeSinceFetch + 1000;
+      }
+      await forceSyncPlayback(currentUserId, uri, exactPosition);
+    });
+
     socket.on('suggest_track', ({ roomId, track }) => {
         if (!global.roomQueues[roomId]) global.roomQueues[roomId] = [];
         const trackExists = global.roomQueues[roomId].find(t => t.id === track.id);
@@ -185,10 +229,66 @@ module.exports = (server) => {
         }
     });
 
+    // ✅ NEW EVENT: Handle a voluntary room departure
+    socket.on("leave-room", () => {
+      if (currentRoomId && global.roomMembers[currentRoomId]) {
+        const leavingMember = global.roomMembers[currentRoomId].find(m => m.socketId === socket.id);
+        
+        // PAUSE THE ROOM IF HOST LEAVES
+        if (leavingMember && leavingMember.isHost) {
+            console.log(`⏸️ Host left room ${currentRoomId}. Pausing auto-DJ.`);
+            clearInterval(global.roomTimers[currentRoomId]);
+            delete global.roomTimers[currentRoomId];
+            io.to(currentRoomId).emit("host-left"); // Warn the listeners!
+        }
+
+        // 1. Remove the specific user from the room's member list
+        global.roomMembers[currentRoomId] = global.roomMembers[currentRoomId].filter(m => m.socketId !== socket.id);
+        
+        // 2. Broadcast the updated list to everyone remaining
+        io.to(currentRoomId).emit("room-users-update", global.roomMembers[currentRoomId]);
+        
+        // 3. Force the socket to actually leave the channel
+        socket.leave(currentRoomId);
+        
+        // 4. Memory Cleanup: If the room is now empty, delete it to save server RAM
+        if (global.roomMembers[currentRoomId].length === 0) {
+            clearInterval(global.roomTimers[currentRoomId]);
+            delete global.roomTimers[currentRoomId];
+            delete global.roomState[currentRoomId];
+            delete global.roomMembers[currentRoomId];
+            delete global.roomQueues[currentRoomId];
+        }
+        
+        // 5. Reset the local variable
+        currentRoomId = null;
+        console.log(`🏃 Client left room: ${socket.id}`);
+      }
+    });
+
     socket.on("disconnect", () => {
         if (currentRoomId && global.roomMembers[currentRoomId]) {
+            const leavingMember = global.roomMembers[currentRoomId].find(m => m.socketId === socket.id);
+        
+            // PAUSE THE ROOM IF HOST DISCONNECTS (Tab close/Refresh)
+            if (leavingMember && leavingMember.isHost) {
+                console.log(`⏸️ Host disconnected from ${currentRoomId}. Pausing auto-DJ.`);
+                clearInterval(global.roomTimers[currentRoomId]);
+                delete global.roomTimers[currentRoomId];
+                io.to(currentRoomId).emit("host-left");
+            }
+
             global.roomMembers[currentRoomId] = global.roomMembers[currentRoomId].filter(m => m.socketId !== socket.id);
             io.to(currentRoomId).emit("room-users-update", global.roomMembers[currentRoomId]);
+
+            // Memory Cleanup
+            if (global.roomMembers[currentRoomId].length === 0) {
+                clearInterval(global.roomTimers[currentRoomId]);
+                delete global.roomTimers[currentRoomId];
+                delete global.roomState[currentRoomId];
+                delete global.roomMembers[currentRoomId];
+                delete global.roomQueues[currentRoomId];
+            }
         }
     });
   });

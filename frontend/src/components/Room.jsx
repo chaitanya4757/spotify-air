@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useParams, useLocation } from "react-router-dom";
+import { useParams, useLocation, useNavigate } from "react-router-dom"; 
 import { useDispatch, useSelector } from "react-redux";
 import socket from "../services/socket";
 import { useAuth } from "../hooks/useAuth";
@@ -13,7 +13,11 @@ import SongQueue from "../components/SongQueue";
 function Room() {
   const { roomId } = useParams();
   const location = useLocation(); 
-  const isHost = location.state?.isHost || false; 
+  const navigate = useNavigate(); 
+  
+  const [isHostLocal, setIsHostLocal] = useState(location.state?.isHost || false); 
+  // ✅ 1. State for our sleek custom warning popup
+  const [hostWarning, setHostWarning] = useState(false);
 
   const dispatch = useDispatch();
   const { user } = useAuth();
@@ -21,6 +25,11 @@ function Room() {
   const [track, setTrack] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const progress = useSelector((state) => state.vibe.progress);
+
+  const handleLeaveRoom = () => {
+    socket.emit("leave-room"); 
+    navigate("/"); 
+  };
 
   const handleManualSync = () => {
     if (!track) return;
@@ -31,14 +40,39 @@ function Room() {
 
   useEffect(() => {
     if (!user || !roomId) return;
+    
     socket.emit("join-room", { 
       roomId, userId: user._id, name: user.displayName, 
-      image: user.images?.[0]?.url || "", isHost 
+      image: user.images?.[0]?.url || "", isHost: isHostLocal 
     });
-    if (isHost) socket.emit("start-stream", { roomId, hostId: user._id });
+    
+    if (isHostLocal) socket.emit("start-stream", { roomId, hostId: user._id });
+
+    socket.on("host-restored", () => {
+        setIsHostLocal(true); 
+        setHostWarning(false); // Hide the banner if the host comes back
+        socket.emit("start-stream", { roomId, hostId: user._id }); 
+    });
+
+    // ✅ 2. Trigger the custom UI instead of an alert()
+    socket.on("host-left", () => {
+        setHostWarning(true); // This turns on the beautiful banner below!
+    });
 
     socket.on("track-update", (data) => {
-      setTrack(data);
+      // ✅ Use a functional state update so we can compare the old track to the new track
+      setTrack((prevTrack) => {
+        // If I am a listener, AND (I just joined OR the song completely changed)...
+        if (!isHostLocal && (!prevTrack || prevTrack.uri !== data.uri)) {
+          console.log("🎧 New song detected! Auto-syncing Spotify in the background...");
+          
+          // Emit the sync command automatically so they don't have to click the button!
+          socket.emit("sync-listener", { uri: data.uri, positionMs: data.progressMs });
+        }
+        
+        return data; // Update the UI state
+      });
+
       if (data.vibeMap) dispatch(updateVibe(data.vibeMap));
     });
     socket.on("room-users-update", (m) => dispatch(updateMembers(m)));
@@ -48,45 +82,65 @@ function Room() {
       socket.off("track-update");
       socket.off("room-users-update");
       socket.off("chat-message");
+      socket.off("host-restored");
+      socket.off("host-left");
     };
-  }, [roomId, user, dispatch, isHost]);
+  }, [roomId, user, dispatch, navigate, isHostLocal]);
 
   useEffect(() => {
     if (track) dispatch(updateProgress((track.progressMs / track.duration_ms) * 100));
   }, [track, dispatch]);
 
   return (
-    <div className="flex flex-col items-center justify-start w-full gap-6 scale-[0.85] origin-top -mb-10 -mt-8">
-      {/* TOP ROW */}
+    <div className="relative flex flex-col items-center justify-start w-full gap-6 scale-[0.85] origin-top -mb-10 -mt-8">
+      
+      {/* ✅ 3. THE CUSTOM "HOST LEFT" IN-PAGE POPUP */}
+      {hostWarning && (
+        <div className="absolute top-2 z-50 flex items-center gap-3 px-6 py-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-400 text-[11px] font-bold tracking-widest uppercase shadow-[0_0_20px_rgba(245,158,11,0.15)] backdrop-blur-xl transition-all">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <span>The Host disconnected! Queue is paused until they return.</span>
+          <button 
+            onClick={() => setHostWarning(false)} 
+            className="ml-4 hover:text-amber-100 transition-colors p-1"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* TOP HEADER */}
+      <div className="flex justify-between items-center w-[1120px] px-6 mt-6">
+        <h1 className="text-white text-3xl font-black tracking-tighter">Spotify Air</h1>
+        <button onClick={handleLeaveRoom} className="px-6 py-2.5 bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/50 rounded-xl text-white/80 hover:text-red-400 text-xs font-bold tracking-widest uppercase transition-all shadow-lg backdrop-blur-md active:scale-95">
+          Leave Room
+        </button>
+      </div>
+
       <div className="flex flex-row items-center justify-center gap-10 w-full">
         <ActiveListeners />
         
-        {/* MAIN PLAYER CARD */}
-        <div className={`relative z-20 bg-white/5 backdrop-blur-2xl rounded-[32px] border border-white/10 w-[320px] text-center shadow-2xl shrink-0 ${isHost ? 'px-8 py-10' : 'p-6'}`}>
-          
-          {/* ALWAYS SHOW ROOM ID AT THE TOP */}
-          <p className={`text-white/30 text-[9px] tracking-widest uppercase ${isHost ? 'mb-4' : 'mb-3'}`}>
-            Room: {roomId}
-          </p>
+        <div className={`relative z-20 bg-white/5 backdrop-blur-2xl rounded-[32px] border border-white/10 w-[320px] text-center shadow-2xl shrink-0 ${isHostLocal ? 'px-8 py-10' : 'p-6'}`}>
+          <p className={`text-white/30 text-[9px] tracking-widest uppercase ${isHostLocal ? 'mb-4' : 'mb-3'}`}>Room: {roomId}</p>
 
           {!track ? (
-            // WAITING STATE
-            <div className={`flex flex-col items-center justify-center ${isHost ? 'py-20' : 'py-16'}`}>
+            <div className={`flex flex-col items-center justify-center ${isHostLocal ? 'py-20' : 'py-16'}`}>
               <p className="text-white/60 text-sm animate-pulse">Waiting for Vibe...</p>
             </div>
           ) : (
-            // PLAYING STATE
             <div>
-              <img src={track.albumArt} className={`rounded-2xl shadow-xl w-full aspect-square object-cover ${isHost ? 'mb-6' : 'mb-3'}`} alt="art" />
-              
-              <h2 className={`text-lg font-bold text-white truncate ${isHost ? 'mb-1' : 'mb-0.5'}`}>{track.title}</h2>
-              <p className={`text-white/50 text-[13px] truncate ${isHost ? 'mb-6' : 'mb-4'}`}>{track.artist}</p>
+              <img src={track.albumArt} className={`rounded-2xl shadow-xl w-full aspect-square object-cover ${isHostLocal ? 'mb-6' : 'mb-3'}`} alt="art" />
+              <h2 className={`text-lg font-bold text-white truncate ${isHostLocal ? 'mb-1' : 'mb-0.5'}`}>{track.title}</h2>
+              <p className={`text-white/50 text-[13px] truncate ${isHostLocal ? 'mb-6' : 'mb-4'}`}>{track.artist}</p>
               
               <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
                 <div className="h-full bg-white transition-all duration-1000" style={{ width: `${progress}%` }} />
               </div>
               
-              {!isHost && (
+              {!isHostLocal && (
                 <button onClick={handleManualSync} disabled={isSyncing} className="mt-4 w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[11px] font-bold tracking-widest uppercase transition-all shadow-lg active:scale-95 border border-white/10">
                   {isSyncing ? "Syncing..." : "Sync to Host"}
                 </button>
@@ -98,14 +152,10 @@ function Room() {
         <VibeChat roomId={roomId} />
       </div>
 
-      {/* BOTTOM ROW - Queue Section */}
       <div className="flex flex-row items-stretch justify-center gap-6 w-[1120px] h-[300px]">
-        {/* Search */}
         <div className="w-[280px] shrink-0 bg-white/5 backdrop-blur-2xl p-5 rounded-[32px] border border-white/10 shadow-2xl flex flex-col overflow-hidden">
           <SpotifySearch roomId={roomId} />
         </div>
-
-        {/* Queue */}
         <div className="flex-1 bg-white/5 backdrop-blur-2xl p-6 rounded-[32px] border border-white/10 shadow-2xl flex flex-col overflow-hidden">
           <div className="flex justify-between items-center mb-4 px-2">
             <h3 className="text-white/80 font-bold uppercase tracking-widest text-xs">Democratic Queue</h3>
