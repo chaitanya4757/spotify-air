@@ -23,6 +23,19 @@ module.exports = (server) => {
     let currentRoomId = null;
     let currentUserId = null;
 
+    socket.on("check-room", async (roomId) => {
+      try {
+        const room = await Room.findOne({ roomId });
+        if (room) {
+          socket.emit("room-valid", roomId);
+        } else {
+          socket.emit("room-invalid");
+        }
+      } catch (err) {
+        console.error("Check Room Error:", err.message);
+      }
+    });
+
     socket.on("join-room", async ({ roomId, userId, name, image, isHost }) => {
       try {
         const room = await Room.findOne({ roomId });

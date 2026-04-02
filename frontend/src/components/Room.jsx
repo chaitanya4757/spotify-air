@@ -165,12 +165,15 @@ function Room() {
 
   useEffect(() => {
     if (!user || !roomId) return;
+    
     socket.emit("join-room", { 
       roomId, userId: user._id, name: user.displayName, 
       image: user.images?.[0]?.url || "", isHost 
     });
+    
     if (isHost) socket.emit("start-stream", { roomId, hostId: user._id });
 
+    // Normal Listeners
     socket.on("track-update", (data) => {
       setTrack(data);
       if (data.vibeMap) dispatch(updateVibe(data.vibeMap));
@@ -178,12 +181,24 @@ function Room() {
     socket.on("room-users-update", (m) => dispatch(updateMembers(m)));
     socket.on("chat-message", (m) => dispatch(addMessage(m)));
 
+    // ✅ NEW: Listen for Backend Errors (Like Invalid Room ID)
+    socket.on("error", (err) => {
+      if (err.message === "Room not found") {
+        alert("❌ Invalid Room ID! This vibe room does not exist.");
+        navigate("/"); // Boot them back to the dashboard immediately
+      } else {
+        console.error("Server Error:", err.message);
+      }
+    });
+
+    // Cleanup
     return () => {
       socket.off("track-update");
       socket.off("room-users-update");
       socket.off("chat-message");
+      socket.off("error"); // ✅ Make sure to clean up the error listener!
     };
-  }, [roomId, user, dispatch, isHost]);
+  }, [roomId, user, dispatch, isHost, navigate]);
 
   useEffect(() => {
     if (track) dispatch(updateProgress((track.progressMs / track.duration_ms) * 100));
