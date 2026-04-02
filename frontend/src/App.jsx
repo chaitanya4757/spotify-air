@@ -1,6 +1,5 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom"; // ✅ Added useLocation
-import { useSelector } from "react-redux";
 import Layout from "./components/Layout";
 import { useAuth } from "./hooks/useAuth";
 import Dashboard from "./components/Dashboard";
@@ -32,9 +31,6 @@ const AppHeader = ({ user, logout }) => {
 
 function App() {
   const { user, login, logout, loading } = useAuth();
-  
-  const vibe = useSelector((state) => state.vibe.vibeData);
-  const progress = useSelector((state) => state.vibe.progress);
 
   if (loading) return <div className="text-white p-10 text-center font-medium tracking-widest">LOADING AIR...</div>;
 

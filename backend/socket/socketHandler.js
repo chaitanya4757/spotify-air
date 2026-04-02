@@ -104,9 +104,20 @@ module.exports = (server) => {
           let playbackStopped = false;
           let isManualPause = false;
 
+          // ✅ NEW: Check if the song was already paused during the LAST server tick
+          const wasPaused = state.lastTrackData && state.lastTrackData.isPlaying === false;
+
           if (state.lastTrackUri && (!data || !data.isPlaying)) {
               if (!data) {
-                  playbackStopped = true;
+                  // ✅ THE BUG FIX: If it was already paused, and now data is missing, 
+                  // Spotify just went to sleep. Let it sleep!
+                  if (wasPaused) {
+                      isManualPause = true;
+                      console.log(`💤 Spotify device went to sleep while paused. Keeping it paused.`);
+                  } else {
+                      // If it vanished while actively playing, it probably hit the end of the queue.
+                      playbackStopped = true;
+                  }
               } else {
                   // Check if we are within the 8-second finish line window
                   const timeLeft = data.duration_ms - data.progressMs;
@@ -115,14 +126,12 @@ module.exports = (server) => {
                       playbackStopped = true; // Natural end
                   } else {
                       isManualPause = true; // Manual pause in middle of song
-                      console.log(`⏸️ Host manually paused with ${Math.floor(timeLeft/1000)}s left.`);
                   }
               }
           }
 
           if (!isManualPause) {
               if (trackChanged || playbackStopped) {
-                
                 // 1. Check Democratic Queue
                 if (global.roomQueues[roomId] && global.roomQueues[roomId].length > 0) {
                   console.log(`🎧 Auto-DJ: Intercepting stream for queued track in ${roomId}`);

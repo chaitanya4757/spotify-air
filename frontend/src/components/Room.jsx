@@ -60,7 +60,19 @@ function Room() {
     });
 
     socket.on("track-update", (data) => {
-      setTrack(data);
+      // ✅ Use a functional state update so we can compare the old track to the new track
+      setTrack((prevTrack) => {
+        // If I am a listener, AND (I just joined OR the song completely changed)...
+        if (!isHostLocal && (!prevTrack || prevTrack.uri !== data.uri)) {
+          console.log("🎧 New song detected! Auto-syncing Spotify in the background...");
+          
+          // Emit the sync command automatically so they don't have to click the button!
+          socket.emit("sync-listener", { uri: data.uri, positionMs: data.progressMs });
+        }
+        
+        return data; // Update the UI state
+      });
+
       if (data.vibeMap) dispatch(updateVibe(data.vibeMap));
     });
     socket.on("room-users-update", (m) => dispatch(updateMembers(m)));
