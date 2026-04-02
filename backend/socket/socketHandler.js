@@ -185,6 +185,33 @@ module.exports = (server) => {
         }
     });
 
+    // ✅ NEW EVENT: Handle a voluntary room departure
+    socket.on("leave-room", () => {
+      if (currentRoomId && global.roomMembers[currentRoomId]) {
+        // 1. Remove the specific user from the room's member list
+        global.roomMembers[currentRoomId] = global.roomMembers[currentRoomId].filter(m => m.socketId !== socket.id);
+        
+        // 2. Broadcast the updated list to everyone remaining (updates the ActiveListeners UI)
+        io.to(currentRoomId).emit("room-users-update", global.roomMembers[currentRoomId]);
+        
+        // 3. Force the socket to actually leave the channel
+        socket.leave(currentRoomId);
+        
+        // 4. Memory Cleanup: If the room is now empty, delete it to save server RAM
+        if (global.roomMembers[currentRoomId].length === 0) {
+            clearInterval(global.roomTimers[currentRoomId]);
+            delete global.roomTimers[currentRoomId];
+            delete global.roomState[currentRoomId];
+            delete global.roomMembers[currentRoomId];
+            delete global.roomQueues[currentRoomId];
+        }
+        
+        // 5. Reset the local variable
+        currentRoomId = null;
+        console.log(`🏃 Client left room: ${socket.id}`);
+      }
+    });
+
     socket.on("disconnect", () => {
         if (currentRoomId && global.roomMembers[currentRoomId]) {
             global.roomMembers[currentRoomId] = global.roomMembers[currentRoomId].filter(m => m.socketId !== socket.id);
