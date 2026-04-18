@@ -1,6 +1,6 @@
 # 🎧 Spotify Air
 
-![Spotify Air Banner](https://via.placeholder.com/1200x400?text=Spotify+Air+-+Real-Time+Music+Sharing) 
+![Spotify Air](https://via.placeholder.com/1200x400?text=Spotify+Air+-+Real-Time+Music+Sharing) 
 
 **Spotify Air** is a real-time music sharing and visualization application that redefines collaborative listening. Built with the MERN stack and powered by the Spotify API, it allows users to connect in shared audio rooms, visualize music through AI-driven vibe maps, and democratically manage what plays next.
 
