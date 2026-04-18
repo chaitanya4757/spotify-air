@@ -63,3 +63,15 @@ Before you begin, ensure you have the following installed:
 ```bash
 git clone [https://github.com/your-username/spotify-air.git](https://github.com/your-username/spotify-air.git)
 cd spotify-air
+
+## ⚠️ Development Status & API Limitations
+
+Due to strict access limitations enforced by the Spotify Web API for applications in **Development Mode**, a public, scalable live-deployment of this application is currently not feasible. 
+
+If you are cloning and running this project locally, please be aware of the following constraints enforced by Spotify:
+
+* **Spotify Premium Required:** The Spotify API requires all authenticated users to have an active Spotify Premium subscription in order to control playback and utilize the Web Playback SDK.
+* **5-User Cap:** Spotify currently restricts Development Mode applications to a maximum of **5 manually whitelisted users**. 
+* **Manual Whitelisting:** To log in and test the application, your specific Spotify account email must be explicitly added to the "User Management" section of the Spotify Developer Dashboard by the app owner.
+
+*(Note: Spotify's "Extended Quota Mode," which lifts these limits, now strictly requires an established registered business entity and a minimum of 250,000 monthly active users, making it largely inaccessible for independent, open-source, or hobbyist projects).*
