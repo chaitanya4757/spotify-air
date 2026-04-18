@@ -16,7 +16,6 @@ function Room() {
   const navigate = useNavigate(); 
   
   const [isHostLocal, setIsHostLocal] = useState(location.state?.isHost || false); 
-  // ✅ 1. State for our sleek custom warning popup
   const [hostWarning, setHostWarning] = useState(false);
 
   const dispatch = useDispatch();
@@ -50,31 +49,26 @@ function Room() {
 
     socket.on("host-restored", () => {
         setIsHostLocal(true); 
-        setHostWarning(false); // Hide the banner if the host comes back
+        setHostWarning(false);
         socket.emit("start-stream", { roomId, hostId: user._id }); 
     });
 
-    // ✅ 2. Trigger the custom UI instead of an alert()
     socket.on("host-left", () => {
-        setHostWarning(true); // This turns on the beautiful banner below!
+        setHostWarning(true); 
     });
 
     socket.on("track-update", (data) => {
-      // ✅ Use a functional state update so we can compare the old track to the new track
       setTrack((prevTrack) => {
-        // If I am a listener, AND (I just joined OR the song completely changed)...
         if (!isHostLocal && (!prevTrack || prevTrack.uri !== data.uri)) {
           console.log("🎧 New song detected! Auto-syncing Spotify in the background...");
-          
-          // Emit the sync command automatically so they don't have to click the button!
           socket.emit("sync-listener", { uri: data.uri, positionMs: data.progressMs });
         }
-        
-        return data; // Update the UI state
+        return data; 
       });
 
       if (data.vibeMap) dispatch(updateVibe(data.vibeMap));
     });
+    
     socket.on("room-users-update", (m) => dispatch(updateMembers(m)));
     socket.on("chat-message", (m) => dispatch(addMessage(m)));
 
@@ -94,7 +88,6 @@ function Room() {
   return (
     <div className="relative flex flex-col items-center justify-start w-full gap-6 scale-[0.85] origin-top -mb-10 -mt-8">
       
-      {/* ✅ 3. THE CUSTOM "HOST LEFT" IN-PAGE POPUP */}
       {hostWarning && (
         <div className="absolute top-2 z-50 flex items-center gap-3 px-6 py-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-400 text-[11px] font-bold tracking-widest uppercase shadow-[0_0_20px_rgba(245,158,11,0.15)] backdrop-blur-xl transition-all">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -123,7 +116,8 @@ function Room() {
       <div className="flex flex-row items-center justify-center gap-10 w-full">
         <ActiveListeners />
         
-        <div className={`relative z-20 bg-white/5 backdrop-blur-2xl rounded-[32px] border border-white/10 w-[320px] text-center shadow-2xl shrink-0 ${isHostLocal ? 'px-8 py-10' : 'p-6'}`}>
+        {/* ✅ PLAYER CARD: Tweaked to bg-black/30 */}
+        <div className={`relative z-20 bg-black/30 backdrop-blur-2xl rounded-[32px] border border-white/10 w-[320px] text-center shadow-2xl shrink-0 ${isHostLocal ? 'px-8 py-10' : 'p-6'}`}>
           <p className={`text-white/30 text-[9px] tracking-widest uppercase ${isHostLocal ? 'mb-4' : 'mb-3'}`}>Room: {roomId}</p>
 
           {!track ? (
@@ -149,14 +143,18 @@ function Room() {
           )}
         </div>
 
+        {/* CHAT BOX */}
         <VibeChat roomId={roomId} />
       </div>
 
       <div className="flex flex-row items-stretch justify-center gap-6 w-[1120px] h-[300px]">
-        <div className="w-[280px] shrink-0 bg-white/5 backdrop-blur-2xl p-5 rounded-[32px] border border-white/10 shadow-2xl flex flex-col overflow-hidden">
+        {/* ✅ SEARCH BOX: Tweaked to bg-black/30 */}
+        <div className="w-[280px] shrink-0 bg-black/30 backdrop-blur-2xl p-5 rounded-[32px] border border-white/10 shadow-2xl flex flex-col overflow-hidden">
           <SpotifySearch roomId={roomId} />
         </div>
-        <div className="flex-1 bg-white/5 backdrop-blur-2xl p-6 rounded-[32px] border border-white/10 shadow-2xl flex flex-col overflow-hidden">
+        
+        {/* ✅ QUEUE BOX: Tweaked to bg-black/30 */}
+        <div className="flex-1 bg-black/30 backdrop-blur-2xl p-6 rounded-[32px] border border-white/10 shadow-2xl flex flex-col overflow-hidden">
           <div className="flex justify-between items-center mb-4 px-2">
             <h3 className="text-white/80 font-bold uppercase tracking-widest text-xs">Democratic Queue</h3>
             <div className="flex items-center gap-2">
