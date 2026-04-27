@@ -59,10 +59,16 @@ Before you begin, ensure you have the following installed:
 
 ## ⚙️ Installation & Setup Guide
 
+### Phase 1: Setup Spotify Developer
+
+**1. Clone the repository:**
+```bash
+git clone [https://github.com/your-username/spotify-air.git](https://github.com/your-username/spotify-air.git)
+cd spotify-air
 ### Phase 1: Spotify Developer Dashboard Setup
 Since Spotify Air relies heavily on the Spotify Web API, you must create an application in the Spotify Developer Dashboard to get your unique credentials.
 
-**1. Create a Developer App**
+**2. Create a Developer App**
 1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and log in with your Spotify account.
 2. Click on the **Create app** button.
 3. Fill in the App Name (e.g., "Spotify Air Local") and App Description.
@@ -70,12 +76,12 @@ Since Spotify Air relies heavily on the Spotify Web API, you must create an appl
    `http://localhost:3000/callback` *(Update the port if your frontend runs on a different one, like 5173).*
 5. Check the Developer Terms of Service box and click **Save**.
 
-**2. Retrieve Your Credentials**
+**3. Retrieve Your Credentials**
 1. On your new app's dashboard, click on **Settings**.
 2. Here, you will see your **Client ID**. Copy this down.
 3. Click **View client secret** to reveal your **Client Secret**. Copy this down as well. *(Never commit these keys to GitHub!)*
 
-**3. Whitelist Test Users (Crucial for Development Mode)**
+**4. Whitelist Test Users (Crucial for Development Mode)**
 Because the app is in Development Mode, only explicitly whitelisted users can log in.
 1. In your app's dashboard, go to the **User Management** tab.
 2. Add the Spotify account email addresses of anyone who will be testing the app (up to a maximum of 5 users). 
