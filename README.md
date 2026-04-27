@@ -62,7 +62,6 @@ Before you begin, ensure you have the following installed:
 ### Phase 1: Setup Spotify Developer
 
 **1. Clone the repository:**
-```bash
 git clone [https://github.com/your-username/spotify-air.git](https://github.com/your-username/spotify-air.git)
 cd spotify-air
 ### Phase 1: Spotify Developer Dashboard Setup
@@ -87,7 +86,6 @@ Because the app is in Development Mode, only explicitly whitelisted users can lo
 2. Add the Spotify account email addresses of anyone who will be testing the app (up to a maximum of 5 users). 
 3. *Note: All whitelisted users must have an active Spotify Premium subscription to use the Web Playback features.*
 
----
 
 ### Phase 2: Environment Configuration
 
