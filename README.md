@@ -103,12 +103,12 @@ VITE_SOCKET_URL=http://localhost:5000
 
 **3. Running the Application Locally:**
 
-*Start the Backend Server:*  
+**Start the Backend Server:**  
 cd backend  
 npm install  
 npm run dev  
 
-*Start the Frontend Server:*  
+**Start the Frontend Server:**  
 cd frontend  
 npm install  
 npm run dev  
