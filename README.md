@@ -98,8 +98,8 @@ PORT=5000
 MONGO_URI=your_mongodb_connection_string
 SPOTIFY_CLIENT_ID=paste_your_client_id_here
 SPOTIFY_CLIENT_SECRET=paste_your_client_secret_here
-SPOTIFY_REDIRECT_URI=http://localhost:3000/callback
-CLIENT_URL=http://localhost:5173
+SPOTIFY_REDIRECT_URI=http://localhost:5000/callback
+CLIENT_URL=http://YOUR_IP:5173)
 SESSION_SECRET=your_random_session_secret
 ```
 **2. Frontend Enviroment:**
@@ -109,7 +109,7 @@ VITE_SOCKET_URL=http://localhost:5000
 **3. Running the Application Locally:**
 
 **Start the Backend Server:**  
-cd backend  
+cd backend     
 npm install  
 npm run dev  
 
