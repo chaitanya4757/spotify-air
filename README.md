@@ -97,11 +97,11 @@ SPOTIFY_CLIENT_SECRET=paste_your_client_secret_here
 SPOTIFY_REDIRECT_URI=http://localhost:3000/callback
 CLIENT_URL=http://localhost:3000
 ```
-2. Frontend Enviroment:
+**2. Frontend Enviroment:**
 VITE_API_URL=http://localhost:5000
 VITE_SOCKET_URL=http://localhost:5000
 
-3. Running the Application Locally:
+**3. Running the Application Locally:**
 
 Start the Backend Server:
 cd backend
