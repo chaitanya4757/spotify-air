@@ -55,11 +55,60 @@ Ultimately, Spotify Air brings people together by making music curation a shared
 Before you begin, ensure you have the following installed:
 * [Node.js](https://nodejs.org/) (v16.x or higher recommended)
 * [MongoDB](https://www.mongodb.com/) (Local instance or MongoDB Atlas URI)
-* A Spotify Developer Account with a registered app to obtain your `Client ID` and `Client Secret`.
+* A Spotify Developer Account with a registered app to obtain your `Client ID` and `Client Secret`.(This requires a Premium account)
 
-### Installation
+## ⚙️ Installation & Setup Guide
 
-**1. Clone the repository:**
-```bash
-git clone [https://github.com/your-username/spotify-air.git](https://github.com/your-username/spotify-air.git)
-cd spotify-air
+### Phase 1: Spotify Developer Dashboard Setup
+Since Spotify Air relies heavily on the Spotify Web API, you must create an application in the Spotify Developer Dashboard to get your unique credentials.
+
+**1. Create a Developer App**
+1. Go to the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) and log in with your Spotify account.
+2. Click on the **Create app** button.
+3. Fill in the App Name (e.g., "Spotify Air Local") and App Description.
+4. For the **Redirect URI**, enter the exact URL your frontend will use to authenticate. If you are running this locally, enter: 
+   `http://localhost:3000/callback` *(Update the port if your frontend runs on a different one, like 5173).*
+5. Check the Developer Terms of Service box and click **Save**.
+
+**2. Retrieve Your Credentials**
+1. On your new app's dashboard, click on **Settings**.
+2. Here, you will see your **Client ID**. Copy this down.
+3. Click **View client secret** to reveal your **Client Secret**. Copy this down as well. *(Never commit these keys to GitHub!)*
+
+**3. Whitelist Test Users (Crucial for Development Mode)**
+Because the app is in Development Mode, only explicitly whitelisted users can log in.
+1. In your app's dashboard, go to the **User Management** tab.
+2. Add the Spotify account email addresses of anyone who will be testing the app (up to a maximum of 5 users). 
+3. *Note: All whitelisted users must have an active Spotify Premium subscription to use the Web Playback features.*
+
+---
+
+### Phase 2: Environment Configuration
+
+Now that you have your Spotify credentials, you need to link them to the local code. 
+
+**1. Backend Environment**
+Navigate to the `backend` folder and create a file named `.env`. Add the following variables:
+```env
+PORT=5000
+MONGO_URI=your_mongodb_connection_string
+SPOTIFY_CLIENT_ID=paste_your_client_id_here
+SPOTIFY_CLIENT_SECRET=paste_your_client_secret_here
+SPOTIFY_REDIRECT_URI=http://localhost:3000/callback
+CLIENT_URL=http://localhost:3000
+```
+2. Frontend Enviroment:
+VITE_API_URL=http://localhost:5000
+VITE_SOCKET_URL=http://localhost:5000
+
+3. Running the Application Locally:
+
+Start the Backend Server:
+cd backend
+npm install
+npm run dev
+
+Start the Frontend Server:
+cd frontend
+npm install
+npm run dev
